@@ -17,6 +17,7 @@ package inject
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -43,7 +44,7 @@ import (
 	meshconfig "github.com/polarismesh/polaris-controller/pkg/inject/api/mesh/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/batch/v2alpha1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -284,7 +285,7 @@ func validateBool(value string) error {
 func (wh *Webhook) getSidecarMode(namespace string) utils.SidecarMode {
 	// 这里主要是处理北极星 sidecar
 	sidecarMode := "mesh"
-	ns, err := wh.k8sClient.CoreV1().Namespaces().Get(namespace, metav1.GetOptions{})
+	ns, err := wh.k8sClient.CoreV1().Namespaces().Get(context.Background(), namespace, metav1.GetOptions{})
 	if err != nil {
 		// 如果出现异常，则就采用默认dns的注入方式
 		log.Errorf("get pod namespace %q failed: %v", namespace, err)
@@ -624,10 +625,12 @@ func FromRawToObject(raw []byte) (runtime.Object, error) {
 func IntoObject(sidecarTemplate string, valuesConfig string, meshconfig *meshconfig.MeshConfig, in runtime.Object) (interface{}, error) {
 	out := in.DeepCopyObject()
 
-	var deploymentMetadata *metav1.ObjectMeta
-	var metadata *metav1.ObjectMeta
-	var podSpec *corev1.PodSpec
-	var typeMeta *metav1.TypeMeta
+	var (
+		deploymentMetadata *metav1.ObjectMeta
+		metadata           *metav1.ObjectMeta
+		podSpec            *corev1.PodSpec
+		typeMeta           *metav1.TypeMeta
+	)
 
 	// Handle Lists
 	if list, ok := out.(*corev1.List); ok {
@@ -657,7 +660,7 @@ func IntoObject(sidecarTemplate string, valuesConfig string, meshconfig *meshcon
 	// CronJobs have JobTemplates in them, instead of Templates, so we
 	// special case them.
 	switch v := out.(type) {
-	case *v2alpha1.CronJob:
+	case *batchv1.CronJob:
 		job := v
 		typeMeta = &job.TypeMeta
 		metadata = &job.Spec.JobTemplate.ObjectMeta

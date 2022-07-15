@@ -16,6 +16,7 @@ package inject
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
@@ -43,7 +44,7 @@ import (
 	meshconfig "github.com/polarismesh/polaris-controller/pkg/inject/api/mesh/v1alpha1"
 	utils "github.com/polarismesh/polaris-controller/pkg/util"
 
-	"k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,7 +60,7 @@ var (
 
 func init() {
 	_ = corev1.AddToScheme(runtimeScheme)
-	_ = v1beta1.AddToScheme(runtimeScheme)
+	_ = admissionv1.AddToScheme(runtimeScheme)
 }
 
 const (
@@ -479,14 +480,16 @@ func buildLabelsStr(labels map[string]string) string {
 
 //handlePolarisSidecarConfig 处理 polaris-sidecar 的配置注入逻辑
 func (wh *Webhook) handlePolarisSidecarConfig(pod *corev1.Pod, add *corev1.Container) (bool, error) {
-	_, err := wh.k8sClient.CoreV1().ConfigMaps(pod.Namespace).Get(utils.PolarisGoConfigFile, metav1.GetOptions{})
+	_, err := wh.k8sClient.CoreV1().ConfigMaps(pod.Namespace).
+		Get(context.Background(), utils.PolarisGoConfigFile, metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			log.Errorf("get polaris-sidecar's configmap=%s namespace %q failed: %v", utils.PolarisGoConfigFile, pod.Namespace, err)
 			return false, err
 		}
 		if errors.IsNotFound(err) {
-			cfgTpl, err := wh.k8sClient.CoreV1().ConfigMaps(common.PolarisControllerNamespace).Get(utils.PolarisGoConfigFileTpl, metav1.GetOptions{})
+			cfgTpl, err := wh.k8sClient.CoreV1().ConfigMaps(common.PolarisControllerNamespace).
+				Get(context.Background(), utils.PolarisGoConfigFileTpl, metav1.GetOptions{})
 			if err != nil {
 				log.Errorf("parse polaris-sidecar failed: %v", err)
 				return false, err
@@ -514,7 +517,8 @@ func (wh *Webhook) handlePolarisSidecarConfig(pod *corev1.Pod, add *corev1.Conta
 				return false, err
 			}
 
-			if _, err := wh.k8sClient.CoreV1().ConfigMaps(pod.Namespace).Create(&configMap); err != nil {
+			if _, err := wh.k8sClient.CoreV1().ConfigMaps(pod.Namespace).
+				Create(context.Background(), &configMap, metav1.CreateOptions{}); err != nil {
 				if !errors.IsAlreadyExists(err) {
 					log.Errorf("create polaris-sidecar configmap for %s failed: %v", pod.Name, err)
 					return false, err
@@ -737,12 +741,12 @@ func injectionStatus(pod *corev1.Pod) *SidecarInjectionStatus {
 	}
 }
 
-func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
-	return &v1beta1.AdmissionResponse{Result: &metav1.Status{Message: err.Error()}}
+func toAdmissionResponse(err error) *admissionv1.AdmissionResponse {
+	return &admissionv1.AdmissionResponse{Result: &metav1.Status{Message: err.Error()}}
 }
 
 // inject istio 核心准入注入逻辑
-func (wh *Webhook) inject(ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
+func (wh *Webhook) inject(ar *admissionv1.AdmissionReview) *admissionv1.AdmissionResponse {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -773,7 +777,7 @@ func (wh *Webhook) inject(ar *v1beta1.AdmissionReview) *v1beta1.AdmissionRespons
 
 	if !wh.injectRequired(ignoredNamespaces, config, &pod.Spec, &pod.ObjectMeta) {
 		log.Infof("Skipping %s/%s due to policy check", pod.ObjectMeta.Namespace, podName)
-		return &v1beta1.AdmissionResponse{
+		return &admissionv1.AdmissionResponse{
 			Allowed: true,
 		}
 	}
@@ -854,11 +858,11 @@ func (wh *Webhook) inject(ar *v1beta1.AdmissionReview) *v1beta1.AdmissionRespons
 
 	log.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
 
-	reviewResponse := v1beta1.AdmissionResponse{
+	reviewResponse := admissionv1.AdmissionResponse{
 		Allowed: true,
 		Patch:   patchBytes,
-		PatchType: func() *v1beta1.PatchType {
-			pt := v1beta1.PatchTypeJSONPatch
+		PatchType: func() *admissionv1.PatchType {
+			pt := admissionv1.PatchTypeJSONPatch
 			return &pt
 		}(),
 	}
@@ -886,8 +890,8 @@ func (wh *Webhook) serveInject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var reviewResponse *v1beta1.AdmissionResponse
-	ar := v1beta1.AdmissionReview{}
+	var reviewResponse *admissionv1.AdmissionResponse
+	ar := admissionv1.AdmissionReview{}
 	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
 		handleError(fmt.Sprintf("Could not decode body: %v", err))
 		reviewResponse = toAdmissionResponse(err)
@@ -895,7 +899,7 @@ func (wh *Webhook) serveInject(w http.ResponseWriter, r *http.Request) {
 		reviewResponse = wh.inject(&ar)
 	}
 
-	response := v1beta1.AdmissionReview{}
+	response := admissionv1.AdmissionReview{}
 	if reviewResponse != nil {
 		response.Response = reviewResponse
 		if ar.Request != nil {

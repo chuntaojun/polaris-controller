@@ -20,52 +20,46 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	goruntime "runtime"
 	"time"
 
 	"github.com/polarismesh/polaris-controller/common/log"
-	"github.com/polarismesh/polaris-controller/pkg/util/configz"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
-	apirequest "k8s.io/apiserver/pkg/endpoints/request"
-	genericfilters "k8s.io/apiserver/pkg/server/filters"
-	"k8s.io/apiserver/pkg/server/healthz"
-	"k8s.io/apiserver/pkg/server/mux"
-	"k8s.io/apiserver/pkg/server/routes"
-	componentbaseconfig "k8s.io/component-base/config"
-	"k8s.io/component-base/metrics/legacyregistry"
+
+	// genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
+	// apirequest "k8s.io/apiserver/pkg/endpoints/request"
+	// genericfilters "k8s.io/apiserver/pkg/server/filters"
 	_ "k8s.io/component-base/metrics/prometheus/workqueue" // for workqueue metric registration
 )
 
 // BuildHandlerChain builds a handler chain with a base handler and CompletedConfig.
-func BuildHandlerChain(apiHandler http.Handler) http.Handler {
-	requestInfoResolver := &apirequest.RequestInfoFactory{}
-	handler := apiHandler
+// func BuildHandlerChain(apiHandler http.Handler) http.Handler {
+// 	requestInfoResolver := &apirequest.RequestInfoFactory{}
+// 	handler := apiHandler
 
-	handler = genericapifilters.WithRequestInfo(handler, requestInfoResolver)
-	handler = genericapifilters.WithCacheControl(handler)
-	handler = genericfilters.WithPanicRecovery(handler)
+// 	handler = genericapifilters.WithRequestInfo(handler, requestInfoResolver)
+// 	handler = genericapifilters.WithCacheControl(handler)
+// 	handler = genericfilters.WithPanicRecovery(handler, requestInfoResolver)
 
-	return handler
-}
+// 	return handler
+// }
 
 // NewBaseHandler takes in CompletedConfig and returns a handler.
-func NewBaseHandler(c *componentbaseconfig.DebuggingConfiguration,
-	checks ...healthz.HealthChecker) *mux.PathRecorderMux {
-	mux := mux.NewPathRecorderMux("controller-manager")
-	healthz.InstallHandler(mux, checks...)
-	if c.EnableProfiling {
-		routes.Profiling{}.Install(mux)
-		if c.EnableContentionProfiling {
-			goruntime.SetBlockProfileRate(1)
-		}
-	}
-	configz.InstallHandler(mux)
-	////lint:ignore SA1019 See the Metrics Stability Migration KEP
-	mux.Handle("/metrics", legacyregistry.Handler())
+// func NewBaseHandler(c *componentbaseconfig.DebuggingConfiguration,
+// 	checks ...healthz.HealthChecker) *mux.PathRecorderMux {
+// 	mux := mux.NewPathRecorderMux("controller-manager")
+// 	healthz.InstallHandler(mux, checks...)
+// 	if c.EnableProfiling {
+// 		routes.Profiling{}.Install(mux)
+// 		if c.EnableContentionProfiling {
+// 			goruntime.SetBlockProfileRate(1)
+// 		}
+// 	}
+// 	configz.InstallHandler(mux)
+// 	////lint:ignore SA1019 See the Metrics Stability Migration KEP
+// 	mux.Handle("/metrics", legacyregistry.Handler())
 
-	return mux
-}
+// 	return mux
+// }
 
 // Serve starts an insecure http server with the given handler. It fails only if
 // the initial listen call fails. It does not block.

@@ -40,9 +40,6 @@ import (
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/apiserver/pkg/server/healthz"
-	"k8s.io/apiserver/pkg/server/mux"
-	"k8s.io/apiserver/pkg/util/term"
 	cacheddiscovery "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/metadata"
@@ -152,15 +149,14 @@ func NewPolarisControllerManagerCommand() *cobra.Command {
 		fs.AddFlagSet(f)
 	}
 	usageFmt := "Usage:\n  %s\n"
-	cols, _, _ := term.TerminalSize(cmd.OutOrStdout())
 	cmd.SetUsageFunc(func(cmd *cobra.Command) error {
 		fmt.Fprintf(cmd.OutOrStderr(), usageFmt, cmd.UseLine())
-		cliflag.PrintSections(cmd.OutOrStderr(), namedFlagSets, cols)
+		cliflag.PrintSections(cmd.OutOrStderr(), namedFlagSets, 24)
 		return nil
 	})
 	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(cmd.OutOrStdout(), "%s\n\n"+usageFmt, cmd.Long, cmd.UseLine())
-		cliflag.PrintSections(cmd.OutOrStdout(), namedFlagSets, cols)
+		cliflag.PrintSections(cmd.OutOrStdout(), namedFlagSets, 24)
 	})
 	return cmd
 }
@@ -275,19 +271,21 @@ func Run(c *options.CompletedConfig, stopCh <-chan struct{}) error {
 	log.Infof("Version: %+v", version.Get())
 
 	//Setup any healthz checks we will want to use.
-	var checks []healthz.HealthChecker
-	var electionChecker *leaderelection.HealthzAdaptor
+	var (
+		// checks          []healthz.HealthChecker
+		electionChecker *leaderelection.HealthzAdaptor
+	)
+
 	if c.ComponentConfig.Generic.LeaderElection.LeaderElect {
 		electionChecker = leaderelection.NewLeaderHealthzAdaptor(time.Second * 20)
-		checks = append(checks, electionChecker)
 	}
 
-	unsecuredMux := options.NewBaseHandler(&c.ComponentConfig.Generic.Debugging, checks...)
+	// unsecuredMux := options.NewBaseHandler(&c.ComponentConfig.Generic.Debugging, checks...)
 	//handler := options.BuildHandlerChain(unsecuredMux)
 
-	if err := options.RunServe(unsecuredMux, c.ComponentConfig.Generic.Port, 0, stopCh); err != nil {
-		return err
-	}
+	// if err := options.RunServe(unsecuredMux, c.ComponentConfig.Generic.Port, 0, stopCh); err != nil {
+	// 	return err
+	// }
 
 	run := func(ctx context.Context) {
 		rootClientBuilder := SimpleControllerClientBuilder{
@@ -298,7 +296,7 @@ func Run(c *options.CompletedConfig, stopCh <-chan struct{}) error {
 			log.Fatalf("error building controller context: %v", err)
 		}
 
-		if err := StartControllers(controllerContext, NewControllerInitializers(), unsecuredMux); err != nil {
+		if err := StartControllers(controllerContext, NewControllerInitializers()); err != nil {
 			log.Fatalf("error starting controllers: %v", err)
 		}
 
@@ -318,7 +316,7 @@ func Run(c *options.CompletedConfig, stopCh <-chan struct{}) error {
 	id := hostname() + "_" + string(uuid.NewUUID())
 
 	rl, err := resourcelock.New(
-		resourcelock.EndpointsResourceLock,
+		resourcelock.EndpointsLeasesResourceLock,
 		c.ComponentConfig.Generic.LeaderElection.ResourceNamespace,
 		DefaultLockObjectName,
 		c.LeaderElectionClient.CoreV1(),
@@ -429,23 +427,23 @@ func CreateControllerContext(s *options.CompletedConfig,
 //}
 
 // StartControllers starts a set of controllers with a specified ControllerContext
-func StartControllers(ctx ControllerContext, controllers map[string]InitFunc, unsecuredMux *mux.PathRecorderMux) error {
+func StartControllers(ctx ControllerContext, controllers map[string]InitFunc) error {
 
 	for controllerName, initFn := range controllers {
 		time.Sleep(wait.Jitter(ctx.ComponentConfig.Generic.ControllerStartInterval.Duration, ControllerStartJitter))
 
 		log.Infof("Starting %q", controllerName)
-		debugHandler, err := initFn(ctx)
+		_, err := initFn(ctx)
 		if err != nil {
 			log.Errorf("Error starting %q", controllerName)
 			return err
 		}
 
-		if debugHandler != nil && unsecuredMux != nil {
-			basePath := "/debug/controllers/" + controllerName
-			unsecuredMux.UnlistedHandle(basePath, http.StripPrefix(basePath, debugHandler))
-			unsecuredMux.UnlistedHandlePrefix(basePath+"/", http.StripPrefix(basePath, debugHandler))
-		}
+		// if debugHandler != nil && unsecuredMux != nil {
+		// 	basePath := "/debug/controllers/" + controllerName
+		// 	unsecuredMux.UnlistedHandle(basePath, http.StripPrefix(basePath, debugHandler))
+		// 	unsecuredMux.UnlistedHandlePrefix(basePath+"/", http.StripPrefix(basePath, debugHandler))
+		// }
 		log.Infof("Started %q", controllerName)
 	}
 

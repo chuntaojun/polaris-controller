@@ -1,9 +1,9 @@
 .PHONY: build
 
 REGISTRY = ""
-REPO = polarismesh/polaris-controller
-SIDECAR_INIT_REPO = polarismesh/polaris-sidecar-init
-IMAGE_TAG = v1.2.2
+REPO = ccr.ccs.tencentyun.com/chuntaojun/polaris-controller
+SIDECAR_INIT_REPO = ccr.ccs.tencentyun.com/chuntaojun/polaris-sidecar-init
+IMAGE_TAG = v1.2.4
 
 build:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o ./bin/polaris-controller ./cmd/polaris-controller/main.go
