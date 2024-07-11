@@ -146,6 +146,7 @@ const (
 	SidecarMeshModeName      string = "mesh"
 	SidecarDnsModeName       string = "dns"
 	SidecarJavaAgentModeName string = "java-agent"
+	SidecarNoneModeName      string = "none"
 )
 
 func ParseSidecarMode(val string) SidecarMode {
@@ -157,6 +158,9 @@ func ParseSidecarMode(val string) SidecarMode {
 	}
 	if val == SidecarJavaAgentModeName {
 		return SidecarForJavaAgent
+	}
+	if val == SidecarNoneModeName {
+		return SidecarForUnknown
 	}
 	return SidecarForMesh
 }
@@ -170,6 +174,9 @@ func ParseSidecarModeName(mode SidecarMode) string {
 	}
 	if mode == SidecarForJavaAgent {
 		return SidecarJavaAgentModeName
+	}
+	if mode == SidecarForUnknown {
+		return SidecarNoneModeName
 	}
 	return SidecarMeshModeName
 }

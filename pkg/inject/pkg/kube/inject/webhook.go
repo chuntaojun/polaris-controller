@@ -805,6 +805,12 @@ func (wh *Webhook) injectV1beta1(ar *v1beta1.AdmissionReview) *v1beta1.Admission
 		config = wh.sidecarJavaAgentConfig
 		tempVersion = wh.sidecarJavaAgentTemplateVersion
 	}
+	if sidecarMode == utils.SidecarForUnknown {
+		log.InjectScope().Infof("Skipping %s/%s due to sidecar mode is none", pod.ObjectMeta.Namespace, podName)
+		return &v1beta1.AdmissionResponse{
+			Allowed: true,
+		}
+	}
 
 	if !wh.injectRequired(ignoredNamespaces, config, &pod.Spec, &pod.ObjectMeta) {
 		log.InjectScope().Infof("Skipping %s/%s due to policy check", pod.ObjectMeta.Namespace, podName)
